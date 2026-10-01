@@ -1,0 +1,6 @@
+.checks/
+_site/
+debug.log
+.env
+.env.*
+!.env.example
