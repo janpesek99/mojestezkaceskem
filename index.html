@@ -130,11 +130,15 @@
           </label>
 
           <div class="photo-line">
-            <label class="photo-button">
-              <span>Fotky</span>
-              <input id="photoInput" type="file" accept="image/jpeg,image/png,image/webp,image/gif" multiple>
-            </label>
             <div id="photoPreview" class="photo-preview"></div>
+            <label class="photo-button" title="Přidat fotky">
+              <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <rect x="3" y="3" width="18" height="18" rx="3" />
+                <circle cx="8" cy="8" r="1.5" />
+                <path d="m3 17 5-5 4 4 4-6 5 7" />
+              </svg>
+              <input id="photoInput" type="file" accept="image/jpeg,image/png,image/webp,image/gif" aria-label="Přidat fotky" multiple>
+            </label>
           </div>
           <p id="photoStorageNote" class="storage-note">Po přihlášení se fotky při uložení etapy synchronizují do účtu.</p>
 

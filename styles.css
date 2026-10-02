@@ -438,12 +438,29 @@ textarea:focus {
 
 .photo-line {
   align-items: flex-start;
+  justify-content: flex-start;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .photo-button {
   position: relative;
   overflow: hidden;
-  flex: 0 0 auto;
+  flex: 0 0 76px;
+  width: 76px;
+  height: 76px;
+  padding: 0;
+  color: var(--green-dark);
+  cursor: pointer;
+}
+
+.photo-button:hover {
+  background: var(--moss);
+}
+
+.photo-button:focus-within {
+  outline: 3px solid var(--green);
+  outline-offset: 2px;
 }
 
 .photo-button input {
@@ -454,11 +471,7 @@ textarea:focus {
 }
 
 .photo-preview {
-  flex: 1 1 auto;
-  min-height: 58px;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
+  display: contents;
 }
 
 .photo-preview img {
@@ -680,8 +693,7 @@ button:focus-visible {
 
   .hero,
   .journal-top,
-  .journal-actions,
-  .photo-line {
+  .journal-actions {
     align-items: stretch;
     flex-direction: column;
   }
