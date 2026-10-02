@@ -210,7 +210,7 @@ async function main() {
     await checkGalleryLayout();
     await check('mapViews.get("n1").partial.style.display !== "none"', 'Partial route must be visible');
     await check('mapViews.get("n1").partial.getAttribute("stroke-dasharray").split(" ")[0] > 0', 'Partial route must show a positive travelled length');
-    await check('getComputedStyle(mapViews.get("n1").partial).stroke === "rgb(198, 91, 22)"', 'Partial progress must use its own color');
+    await check('getComputedStyle(mapViews.get("n1").partial).stroke === "rgb(245, 182, 111)"', 'Partial progress must use light orange');
     await evaluate('elements.done.checked = true; elements.done.dispatchEvent(new Event("change"));');
     await until('!state.saving');
     await check('getEntry("n1").done && getEntry("n1").completedKm === 110', 'Checkbox must still complete the full stage');
