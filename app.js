@@ -305,21 +305,18 @@ async function uploadCloudPhotos(photos, stageId, userId, client, revision, adde
     assertCurrentAccount(revision);
     // A stable content hash prevents duplicates when retrying a failed save.
     if (!uploaded.has(path)) {
-      if (!state.photoCache.get(path)?.uploaded) {
-        const { error } = await client.storage.from(photoBucket).upload(path, blob, {
-          contentType: blob.type, upsert: true,
-        });
-        if (error) throw error;
-        assertCurrentAccount(revision);
-        const cached = state.photoCache.get(path);
-        if (cached) {
-          cached.uploaded = true;
-        } else {
-          const url = URL.createObjectURL(blob);
-          state.photoCache.set(path, { url, bytes: blob.size, uploaded: true, promise: Promise.resolve(url) });
-        }
-        trimPhotoCache();
+      // A fresh selection must upload again: another device may have deleted
+      // the object since this browser cached it. Upsert keeps retries idempotent.
+      const { error } = await client.storage.from(photoBucket).upload(path, blob, {
+        contentType: blob.type, upsert: true,
+      });
+      if (error) throw error;
+      assertCurrentAccount(revision);
+      if (!state.photoCache.has(path)) {
+        const url = URL.createObjectURL(blob);
+        state.photoCache.set(path, { url, bytes: blob.size, promise: Promise.resolve(url) });
       }
+      trimPhotoCache();
       uploaded.set(path, { path });
     }
   }

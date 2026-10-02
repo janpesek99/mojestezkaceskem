@@ -268,8 +268,11 @@ async function photoSyncTests() {
     p_stage_id: 'n1', p_photo_paths: [...savedRow.photo_paths, removedPath],
   }).single();
   assert.equal(savedRow.photo_paths.includes(removedPath), false, 'Stale saves cannot resurrect deleted photos');
+  const uploadsBeforeReAdd = uploads.length;
+  run('state.photoCache.set(removedPath, { uploaded: true, url: "blob:old", bytes: 1 });');
   run('state.pendingPhotos = [png];');
   await run('saveEntry();');
+  assert.equal(uploads.length, uploadsBeforeReAdd + 1, 'Explicit re-add uploads even with a stale cache from another device');
   assert.equal(savedRow.photo_paths.includes(removedPath), true, 'Explicit re-add restores the same content');
   assert.equal(savedRow.photo_deleted_paths.includes(removedPath), false);
 
