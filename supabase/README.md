@@ -16,7 +16,7 @@ Pro nasazení přidej také skutečnou HTTPS adresu webu do URL Configuration.
 
 ## Co se ukládá
 
-Klepnutím na fotku otevřeš větší náhled; zavřeš jej křížkem, klávesou Escape nebo klepnutím mimo fotku. Pod každou fotkou je **Smazat**. Smazání potvrdíš uložením etapy; do té doby zůstává součástí rozepsaných úprav i při přepínání etap. U účtu se odstraní odkaz a následně soubor ze soukromého úložiště. Pokud odstranění souboru selže, další uložení etapy jej zopakuje. Pro tuto funkci spusť celý aktuální `photo-sync.sql` v SQL Editoru Supabase. Záznamy smazaných cest brání obnovení fotky při uložení ze staršího zařízení; výslovné přidání stejné fotky ji může znovu připojit.
+Klepnutím na fotku otevřeš větší náhled; zavřeš jej křížkem, klávesou Escape nebo klepnutím mimo fotku. V otevřeném náhledu je **Smazat fotku**. Smazání potvrdíš uložením etapy; do té doby zůstává součástí rozepsaných úprav i při přepínání etap. U účtu se odstraní odkaz a následně soubor ze soukromého úložiště. Pokud odstranění souboru selže, další uložení etapy jej zopakuje. Pro tuto funkci spusť celý aktuální `photo-sync.sql` v SQL Editoru Supabase. Záznamy smazaných cest brání obnovení fotky při uložení ze staršího zařízení; výslovné přidání stejné fotky ji může znovu připojit.
 
 - Přihlášený účet: dokončení etap, prošlé kilometry, datum od–do, poznámky a cesty k fotkám do `public.stage_progress`.
 - Fotografie přihlášeného účtu: při uložení etapy do soukromého bucketu `stage-photos` v Supabase Storage. Na jiném zařízení se načtou po přihlášení a otevření etapy.

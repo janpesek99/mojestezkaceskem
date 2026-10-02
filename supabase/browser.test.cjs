@@ -133,6 +133,33 @@ async function main() {
       throw new Error(`Browser condition not met: ${expression}`);
     };
     const check = async (expression, message) => assert.equal(await evaluate(expression), true, message);
+    const checkGalleryLayout = async () => {
+      const layout = await evaluate(`(() => {
+        const add = elements.addPhoto.getBoundingClientRect();
+        const gallery = elements.photoPreview.getBoundingClientRect();
+        const photos = [...elements.photoPreview.querySelectorAll('.photo-open')].map(node => node.getBoundingClientRect());
+        const gap = parseFloat(getComputedStyle(elements.photoPreview).columnGap);
+        const last = photos.at(-1);
+        const wraps = last && last.right + gap + add.width > gallery.right + 0.5;
+        return {
+          equalSizes: photos.every(photo => Math.abs(photo.width - add.width) < 0.5 && Math.abs(photo.height - add.height) < 0.5),
+          followsLast: Math.abs(add.x - (!last || wraps ? gallery.x : last.right + gap)) < 0.5
+            && Math.abs(add.y - (!last ? gallery.y : wraps ? last.bottom + gap : last.y)) < 0.5,
+          hasInlineDelete: Boolean(elements.photoPreview.querySelector('.photo-remove')),
+          width: add.width, height: add.height,
+        };
+      })()`);
+      assert.equal(layout.equalSizes, true, 'Upload tile and photo thumbnails must have identical measured dimensions');
+      assert.equal(layout.followsLast, true, 'Upload tile must occupy the next position after the last photo, or the first position in an empty gallery');
+      assert.equal(layout.hasInlineDelete, false, 'Delete controls belong in the preview');
+      assert.equal(layout.width, layout.height, 'Upload tile must be square');
+    };
+    const deletePhoto = async (index = 0) => {
+      await evaluate(`elements.photoPreview.querySelectorAll('.photo-open')[${index}].click();`);
+      await check('elements.photoDialog.open && !elements.removePhoto.disabled', 'Delete must be available inside the open preview');
+      await evaluate('elements.removePhoto.click();');
+      await until('!elements.photoDialog.open');
+    };
     const viewport = (width, height) => send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: width < 860 });
     await send('Runtime.enable');
     await send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] });
@@ -144,25 +171,43 @@ async function main() {
     await evaluate('window.originalButton = document.querySelector(".stage-button"); window.originalSegment = document.querySelector(".route-segment"); originalButton.click();');
     await check('originalButton.nextElementSibling === elements.form', 'Editor must open directly under the selected stage');
     await check('document.documentElement.scrollWidth <= innerWidth', 'Mobile page must not overflow horizontally');
+    await checkGalleryLayout();
     await evaluate('elements.note.value = "Rozpracovaný záznam"; elements.completedKm.value = "25.5"; elements.completedKm.dispatchEvent(new Event("input")); document.querySelectorAll(".stage-button")[1].click(); originalButton.click();');
     await check('elements.note.value === "Rozpracovaný záznam" && elements.completedKm.value === "25.5"', 'Changing stages must preserve the draft');
     await evaluate('window.testPng = Uint8Array.from(atob("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII="), c => c.charCodeAt(0)); await addPhotos({ target: { files: [new File([testPng], "photo.png", { type: "image/png" })] } }); document.querySelectorAll(".stage-button")[1].click(); originalButton.click();');
     await check('state.pendingPhotos.length === 1 && elements.photoPreview.querySelectorAll("img").length === 1', 'Unsaved photos must survive stage changes');
+    await checkGalleryLayout();
+    await evaluate('await addPhotos({ target: { files: Array.from({ length: 3 }, (_, i) => new File([testPng], "extra-" + i + ".png", { type: "image/png" })) } });');
+    for (const width of [320, 390, 1280]) {
+      await viewport(width, 900);
+      await until(width < 860 ? 'originalButton.nextElementSibling === elements.form' : 'elements.form.parentElement === elements.content');
+      await checkGalleryLayout();
+      await check('document.documentElement.scrollWidth <= innerWidth', 'Wrapped photo gallery must fit the viewport');
+    }
+    await viewport(390, 844);
+    await until('originalButton.nextElementSibling === elements.form');
+    const galleryClip = await evaluate('(() => { const rect = elements.photoPreview.getBoundingClientRect(); return { x: rect.x + scrollX, y: rect.y + scrollY, width: rect.width, height: rect.height, scale: 1 }; })()');
+    const galleryScreenshot = await send('Page.captureScreenshot', { format: 'png', clip: galleryClip, captureBeyondViewport: true });
+    fs.writeFileSync(path.join(checks, 'photo-gallery-mobile.png'), Buffer.from(galleryScreenshot.data, 'base64'));
+    await evaluate('state.pendingPhotos = state.pendingPhotos.slice(0, 1); renderPhotos();');
     await evaluate('elements.photoPreview.querySelector(".photo-open").click();');
     await check('elements.photoDialog.open && elements.photoDialogImage.src.startsWith("data:image/")', 'Guest thumbnail must open a large preview');
     await check('document.documentElement.scrollWidth <= innerWidth', 'Preview must fit a mobile viewport');
     await send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 });
     await send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 });
     await until('!elements.photoDialog.open && !elements.photoDialogImage.getAttribute("src")');
-    await evaluate('await addPhotos({ target: { files: [new File([testPng], "second.png", { type: "image/png" })] } }); elements.photoPreview.querySelectorAll(".photo-remove")[1].click();');
+    await evaluate('await addPhotos({ target: { files: [new File([testPng], "second.png", { type: "image/png" })] } });');
+    await deletePhoto(1);
     await check('state.pendingPhotos.length === 1', 'Delete must remove only the chosen unsaved photo');
     await check('originalButton === document.querySelector(".stage-button") && originalSegment === document.querySelector(".route-segment")', 'Rendering must preserve map and list nodes');
     await evaluate('await saveEntry();');
     await check('getEntry("n1").completedKm === 25.5 && !getEntry("n1").done', 'Partial progress must save');
-    await evaluate('elements.photoPreview.querySelector(".photo-remove").click(); document.querySelectorAll(".stage-button")[1].click(); originalButton.click();');
+    await deletePhoto();
+    await evaluate('document.querySelectorAll(".stage-button")[1].click(); originalButton.click();');
     await check('state.removedPhotos.length === 1 && !elements.photoPreview.querySelector("img") && getEntry("n1").photos.length === 1', 'Photo deletion must stay in the draft across stage changes');
     await evaluate('await saveEntry();');
     await check('getEntry("n1").photos.length === 0 && JSON.parse(localStorage.getItem(storageKey)).n1.photos.length === 0', 'Saving must persist guest photo deletion');
+    await checkGalleryLayout();
     await check('mapViews.get("n1").partial.style.display !== "none"', 'Partial route must be visible');
     await check('mapViews.get("n1").partial.getAttribute("stroke-dasharray").split(" ")[0] > 0', 'Partial route must show a positive travelled length');
     await check('getComputedStyle(mapViews.get("n1").partial).stroke === "rgb(198, 91, 22)"', 'Partial progress must use its own color');
@@ -205,13 +250,14 @@ async function main() {
     await check('elements.photoDialog.open && elements.photoDialogImage.src.startsWith("blob:")', 'Cloud preview must reuse the private downloaded photo');
     await evaluate('elements.closePhoto.click();');
     await until('!elements.photoDialog.open');
-    await evaluate('elements.photoPreview.querySelector(".photo-remove").click(); await saveEntry(); await loadCloudEntries();');
+    await deletePhoto();
+    await evaluate('await saveEntry(); await loadCloudEntries();');
     await check('getEntry("n1").photos.length === 0 && state.photoCache.size === 0', 'Cloud deletion must survive reload and revoke cached images');
     await evaluate('await addPhotos({ target: { files: [new File([testPng], "re-added.png", { type: "image/png" })] } }); await saveEntry();');
     await until('elements.photoPreview.querySelector("img")?.src.startsWith("blob:")');
     await check('getEntry("n1").photos.length === 1', 'A deleted photo can be explicitly added again');
     assert.deepEqual(errors, [], 'Browser must not raise uncaught exceptions');
-    console.log('PASS: real Chrome mobile/desktop layout, drafts, progress, login isolation, photo preview/Escape, pending/guest/cloud deletion, deletion retention and re-add');
+    console.log('PASS: measured empty/single/wrapped gallery layout and equal tile sizes at 320/390/1280px, deletion inside preview, drafts, progress, login, cloud photos');
     await send('Browser.close').catch(() => {});
   } finally {
     socket?.close();

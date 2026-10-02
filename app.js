@@ -83,6 +83,7 @@ const state = {
   removedPhotos: [],
   drafts: new Map(),
   photoCache: new Map(),
+  previewPhoto: null,
   user: null,
   client: null,
   authReady: false,
@@ -111,10 +112,12 @@ const elements = {
   note: document.querySelector("#stageNote"),
   photoInput: document.querySelector("#photoInput"),
   photoPreview: document.querySelector("#photoPreview"),
+  addPhoto: document.querySelector("#addPhotoBtn"),
   photoStorageNote: document.querySelector("#photoStorageNote"),
   photoDialog: document.querySelector("#photoDialog"),
   photoDialogImage: document.querySelector("#photoDialogImage"),
   closePhoto: document.querySelector("#closePhotoBtn"),
+  removePhoto: document.querySelector("#removePhotoBtn"),
   save: document.querySelector("#saveEntryBtn"),
   progressPercent: document.querySelector("#mapProgressPercent"),
   progressText: document.querySelector("#mapProgressText"),
@@ -139,10 +142,14 @@ function init() {
   });
   elements.photoInput.addEventListener("change", addPhotos);
   elements.closePhoto.addEventListener("click", closePhotoPreview);
+  elements.removePhoto.addEventListener("click", removePreviewPhoto);
   elements.photoDialog.addEventListener("click", (event) => {
     if (event.target === elements.photoDialog) closePhotoPreview();
   });
-  elements.photoDialog.addEventListener("close", () => elements.photoDialogImage.removeAttribute("src"));
+  elements.photoDialog.addEventListener("close", () => {
+    elements.photoDialogImage.removeAttribute("src");
+    state.previewPhoto = null;
+  });
   [elements.dateFrom, elements.dateTo].forEach((input) =>
     input.addEventListener("input", () => elements.dateTo.setCustomValidity("")));
   window.addEventListener("stezka:auth", handleAuthChange);
@@ -164,7 +171,7 @@ function updateJournalControls() {
   const disabled = !state.selectedId || journalLocked();
   [elements.done, elements.completedKm, elements.dateFrom, elements.dateTo, elements.note, elements.photoInput, elements.save]
     .forEach((element) => { element.disabled = disabled; });
-  elements.photoPreview.querySelectorAll(".photo-remove").forEach((button) => { button.disabled = disabled; });
+  elements.removePhoto.disabled = disabled;
   elements.save.textContent = state.saving ? "Ukládám…" : state.readingPhotos ? "Načítám fotky…" : "Uložit";
 }
 
@@ -686,7 +693,7 @@ function renderJournal() {
     elements.note.disabled = true;
     elements.photoInput.disabled = true;
     elements.save.disabled = true;
-    elements.photoPreview.innerHTML = "";
+    elements.photoPreview.replaceChildren(elements.addPhoto);
     return;
   }
 
@@ -721,7 +728,7 @@ function renderPhotos() {
   const savedPhotos = (entry.photos || []).filter((photo) => !state.removedPhotos.includes(photo));
   const photos = [...savedPhotos, ...state.pendingPhotos];
   trimPhotoCache();
-  elements.photoPreview.innerHTML = "";
+  elements.photoPreview.replaceChildren(elements.addPhoto);
 
   const revision = state.revision;
   if (state.user && (entry.photos || []).some((photo) => typeof photo === "string")) {
@@ -740,27 +747,16 @@ function renderPhotos() {
     preview.appendChild(image);
     preview.addEventListener("click", () => {
       if (!image.getAttribute("src")) return;
+      state.previewPhoto = {
+        photo, saved: index < savedPhotos.length, pendingIndex: index - savedPhotos.length,
+        stageId: state.selectedId, revision: state.revision, index,
+      };
       elements.photoDialogImage.src = image.src;
       elements.photoDialogImage.alt = `Fotka z etapy ${findStage(state.selectedId).name}`;
       elements.photoDialog.showModal();
     });
-    const remove = document.createElement("button");
-    remove.type = "button";
-    remove.className = "photo-remove";
-    remove.textContent = "Smazat";
-    remove.setAttribute("aria-label", `Smazat fotku ${index + 1}`);
-    remove.disabled = journalLocked();
-    remove.addEventListener("click", () => {
-      if (journalLocked()) return;
-      if (index < savedPhotos.length) state.removedPhotos.push(photo);
-      else state.pendingPhotos.splice(index - savedPhotos.length, 1);
-      renderPhotos();
-      elements.photoPreview.querySelectorAll(".photo-remove")[Math.min(index, elements.photoPreview.children.length - 1)]?.focus();
-      if (!elements.photoPreview.children.length) elements.save.focus();
-      syncMessage("Fotka je odebraná z rozpracované etapy. Změnu potvrď tlačítkem Uložit.");
-    });
-    card.append(preview, remove);
-    elements.photoPreview.appendChild(card);
+    card.appendChild(preview);
+    elements.photoPreview.insertBefore(card, elements.addPhoto);
     if (typeof photo === "string") {
       image.src = photo;
     } else {
@@ -779,7 +775,25 @@ function renderPhotos() {
 }
 
 function closePhotoPreview() {
+  state.previewPhoto = null;
   if (elements.photoDialog.open) elements.photoDialog.close();
+}
+
+function removePreviewPhoto() {
+  const target = state.previewPhoto;
+  if (!target || journalLocked() || target.revision !== state.revision || target.stageId !== state.selectedId) return;
+  if (target.saved) {
+    if (!(getEntry(target.stageId).photos || []).includes(target.photo)) return;
+    state.removedPhotos.push(target.photo);
+  } else {
+    if (state.pendingPhotos[target.pendingIndex] !== target.photo) return;
+    state.pendingPhotos.splice(target.pendingIndex, 1);
+  }
+  closePhotoPreview();
+  renderPhotos();
+  const previews = elements.photoPreview.querySelectorAll(".photo-open");
+  (previews[Math.min(target.index, previews.length - 1)] || elements.photoInput).focus();
+  syncMessage("Fotka je odebraná z rozpracované etapy. Změnu potvrď tlačítkem Uložit.");
 }
 
 function renderStats() {
