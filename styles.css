@@ -353,6 +353,12 @@ h2 {
   color: var(--muted);
 }
 
+.stage-route {
+  font-size: .75rem;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
 .journal {
   display: grid;
   gap: 14px;

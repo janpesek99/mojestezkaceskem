@@ -10,35 +10,36 @@ const mapBounds = {
   maxLat: 51.055701,
 };
 
+// Výchozí a cílová místa podle itinerářů na https://www.stezkaceskem.cz/etapy/.
 const branches = {
   north: {
     name: "Severn\u00ed v\u011btev",
     stages: [
-      { id: "n1", name: "Kr\u00e1sn\u00e1 - Kl\u00ednovec", km: 110, lon: 12.55, lat: 50.27, routeOrder: 1 },
-      { id: "n2", name: "Kru\u0161n\u00e9 hory", km: 162, lon: 13.45, lat: 50.65, routeOrder: 2 },
-      { id: "n3", name: "\u010cesk\u00e9 \u0160v\u00fdcarsko - Lu\u017eick\u00e9 hory", km: 107, lon: 14.35, lat: 50.83, routeOrder: 3 },
-      { id: "n4", name: "Jizersk\u00e9 hory - Krkono\u0161e", km: 107, lon: 15.35, lat: 50.75, routeOrder: 4 },
-      { id: "n5", name: "Adr\u0161pach - Broumovsko", km: 98, lon: 16.18, lat: 50.58, routeOrder: 5 },
-      { id: "n6", name: "Orlick\u00e9 hory", km: 92, lon: 16.55, lat: 50.23, routeOrder: 6 },
-      { id: "n7", name: "Jesen\u00edky", km: 142, lon: 17.20, lat: 50.08, routeOrder: 8 },
-      { id: "n8", name: "Podbeskyd\u00ed", km: 58, lon: 17.78, lat: 49.72, routeOrder: 9 },
-      { id: "n9", name: "Beskydy", km: 105, lon: 18.55, lat: 49.55, routeOrder: 10 },
-      { id: "n10", name: "Rychlebsk\u00e9 hory", km: 36.5, lon: 17.05, lat: 50.35, routeOrder: 7 },
+      { id: "n1", name: "Kr\u00e1sn\u00e1 - Kl\u00ednovec", from: "Nejzápadnější bod ČR", to: "Boží Dar", km: 110, lon: 12.55, lat: 50.27, routeOrder: 1 },
+      { id: "n2", name: "Kru\u0161n\u00e9 hory", from: "Boží Dar", to: "Dolní Žleb", km: 162, lon: 13.45, lat: 50.65, routeOrder: 2 },
+      { id: "n3", name: "\u010cesk\u00e9 \u0160v\u00fdcarsko - Lu\u017eick\u00e9 hory", from: "Dolní Žleb", to: "Chrastava", km: 107, lon: 14.35, lat: 50.83, routeOrder: 3 },
+      { id: "n4", name: "Jizersk\u00e9 hory - Krkono\u0161e", from: "Chrastava", to: "Žacléř", km: 107, lon: 15.35, lat: 50.75, routeOrder: 4 },
+      { id: "n5", name: "Adr\u0161pach - Broumovsko", from: "Žacléř", to: "Velké Poříčí", km: 98, lon: 16.18, lat: 50.58, routeOrder: 5 },
+      { id: "n6", name: "Orlick\u00e9 hory", from: "Velké Poříčí", to: "Králíky", km: 92, lon: 16.55, lat: 50.23, routeOrder: 6 },
+      { id: "n7", name: "Jesen\u00edky", from: "Králíky", to: "Budišov nad Budišovkou", km: 142, lon: 17.20, lat: 50.08, routeOrder: 8 },
+      { id: "n8", name: "Podbeskyd\u00ed", from: "Budišov nad Budišovkou", to: "Hodslavice", km: 58, lon: 17.78, lat: 49.72, routeOrder: 9 },
+      { id: "n9", name: "Beskydy", from: "Hodslavice", to: "Nejvýchodnější bod ČR", km: 105, lon: 18.55, lat: 49.55, routeOrder: 10 },
+      { id: "n10", name: "Rychlebsk\u00e9 hory", from: "Smrk – hraničník", to: "Bílá Voda", km: 36.5, lon: 17.05, lat: 50.35, routeOrder: 7 },
     ],
   },
   south: {
     name: "Ji\u017en\u00ed v\u011btev",
     stages: [
-      { id: "s11", name: "Beskydy - Javorn\u00edky", km: 115.3, lon: 18.48, lat: 49.32, routeOrder: 1 },
-      { id: "s12", name: "B\u00edl\u00e9 Karpaty", km: 93.5, lon: 17.75, lat: 48.95, routeOrder: 2 },
-      { id: "s13", name: "Dolnomoravsk\u00fd \u00faval", km: 116.7, lon: 16.85, lat: 48.78, routeOrder: 3 },
-      { id: "s14", name: "Podyj\u00ed", km: 110, lon: 15.85, lat: 48.85, routeOrder: 4 },
-      { id: "s15", name: "\u010cesk\u00e1 Kanada", km: 87.7, lon: 15.18, lat: 49.02, routeOrder: 5 },
-      { id: "s16", name: "Novohradsk\u00e9 hory", km: 134, lon: 14.62, lat: 48.74, routeOrder: 6 },
-      { id: "s17", name: "Ji\u017en\u00ed \u0160umava", km: 81.4, lon: 13.85, lat: 48.78, routeOrder: 7 },
-      { id: "s18", name: "\u0160umava", km: 105, lon: 13.35, lat: 49.00, routeOrder: 8 },
-      { id: "s19", name: "Z\u00e1padn\u00ed \u0160umava", km: 116, lon: 13.00, lat: 49.20, routeOrder: 9 },
-      { id: "s20", name: "\u010cesk\u00fd les", km: 131, lon: 12.55, lat: 49.65, routeOrder: 10 },
+      { id: "s11", name: "Beskydy - Javorn\u00edky", from: "Nejvýchodnější bod ČR", to: "Valašské Klobouky", km: 115.3, lon: 18.48, lat: 49.32, routeOrder: 1 },
+      { id: "s12", name: "B\u00edl\u00e9 Karpaty", from: "Valašské Klobouky", to: "Javorník nad Veličkou", km: 93.5, lon: 17.75, lat: 48.95, routeOrder: 2 },
+      { id: "s13", name: "Dolnomoravsk\u00fd \u00faval", from: "Javorník nad Veličkou", to: "Mikulov", km: 116.7, lon: 16.85, lat: 48.78, routeOrder: 3 },
+      { id: "s14", name: "Podyj\u00ed", from: "Mikulov", to: "Vranov nad Dyjí", km: 110, lon: 15.85, lat: 48.85, routeOrder: 4 },
+      { id: "s15", name: "\u010cesk\u00e1 Kanada", from: "Vranov nad Dyjí", to: "Nová Bystřice", km: 87.7, lon: 15.18, lat: 49.02, routeOrder: 5 },
+      { id: "s16", name: "Novohradsk\u00e9 hory", from: "Nová Bystřice", to: "Rybník (žst.)", km: 134, lon: 14.62, lat: 48.74, routeOrder: 6 },
+      { id: "s17", name: "Ji\u017en\u00ed \u0160umava", from: "Rybník (žst.)", to: "Rakouská cesta", km: 81.4, lon: 13.85, lat: 48.78, routeOrder: 7 },
+      { id: "s18", name: "\u0160umava", from: "Rakouská cesta", to: "Železná Ruda", km: 105, lon: 13.35, lat: 49.00, routeOrder: 8 },
+      { id: "s19", name: "Z\u00e1padn\u00ed \u0160umava", from: "Železná Ruda", to: "Rozvadov – U Staré celnice", km: 116, lon: 13.00, lat: 49.20, routeOrder: 9 },
+      { id: "s20", name: "\u010cesk\u00fd les", from: "Rozvadov – U Staré celnice", to: "Nejzápadnější bod ČR", km: 131, lon: 12.55, lat: 49.65, routeOrder: 10 },
     ],
   },
 };
@@ -645,6 +646,7 @@ function renderList() {
     branch.stages.forEach((stage) => {
       const button = elements.template.content.firstElementChild.cloneNode(true);
       button.querySelector("strong").textContent = stage.name;
+      button.querySelector(".stage-route").textContent = `${stage.from} → ${stage.to}`;
       button.setAttribute("aria-controls", "journalForm");
       button.addEventListener("click", () => selectStage(stage.id));
       listViews.set(stage.id, button);
@@ -662,7 +664,7 @@ function renderList() {
       button.classList.toggle("partial", !entry.done && completedKm(stage) > 0);
       button.classList.toggle("active", stage.id === state.selectedId);
       button.setAttribute("aria-expanded", String(stage.id === state.selectedId));
-      button.querySelector("small").textContent = `${formatKm(completedKm(stage))} / ${formatKm(stage.km)} km`;
+      button.querySelector(".stage-progress").textContent = `${formatKm(completedKm(stage))} / ${formatKm(stage.km)} km`;
     });
 
   });
