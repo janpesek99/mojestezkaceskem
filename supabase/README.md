@@ -3,8 +3,8 @@
 1. Spusť `start-local.cmd` dvojklikem. Otevřené okno nech běžet.
 2. V prohlížeči otevři **http://127.0.0.1:5500/index.html** (ne `file:///…`).
 3. V Supabase otevři svůj projekt → Authentication → URL Configuration.
-4. Do **Site URL** vlož `http://127.0.0.1:5500/index.html`.
-5. Do **Redirect URLs** přidej `http://127.0.0.1:5500/index.html` a ulož.
+4. Do **Site URL** vlož `https://janpesek99.github.io/mojestezkaceskem/`. Tato výchozí adresa musí zůstat veřejná i při lokálním vývoji.
+5. Do **Redirect URLs** přidej `https://janpesek99.github.io/mojestezkaceskem/`, `https://janpesek99.github.io/mojestezkaceskem/index.html` a pro lokální vývoj také `http://127.0.0.1:5500/index.html`. Nastavení ulož.
 6. Pokud jsi to ještě neudělal, spusť obsah `schema.sql` jednou v SQL Editoru. Potom spusť `photo-sync.sql`, který vytvoří soukromé úložiště fotek.
 7. V aplikaci zvol **Vytvořit účet**, zadej e-mail a dvakrát heslo.
 8. Potvrď registraci odkazem z e-mailu. Při otevření odkazu musí lokální server běžet.
@@ -12,7 +12,17 @@
 
 Veřejný klíč a URL projektu jsou v `supabase-config.js`. Hesla ani tajné klíče do něj nepatří.
 Knihovna Supabase se načítá z CDN; přihlášení a ukládání do účtu vyžadují internet.
-Pro nasazení přidej také skutečnou HTTPS adresu webu do URL Configuration.
+Při změně domény uprav Site URL i Redirect URLs. Nastavení v Supabase nelze změnit veřejným klíčem z aplikace.
+
+## Pokud potvrzení nebo obnova hesla otevírá localhost
+
+Zkontroluj **Authentication → URL Configuration** podle bodů 4 a 5 výše. Aplikace při registraci i obnově hesla posílá adresu aktuální stránky, ale Supabase ji musí přijmout jako povolenou adresu.
+
+Po uložení nastavení otevři veřejný web a vyžádej nový odkaz pro obnovu hesla. Starší e-mail může obsahovat původní lokální přesměrování. Pokud už jsi klikl na potvrzení registrace, účet může být potvrzený i přes neúspěšný návrat na localhost; nejprve zkus přihlášení na veřejném webu.
+
+Pokud jsi upravoval e-mailové šablony **Confirm signup** nebo **Reset password**, jejich potvrzovací tlačítko má v této statické aplikaci používat `{{ .ConfirmationURL }}`. Pouhý odkaz na `{{ .SiteURL }}` nebo `{{ .RedirectTo }}` token neověří; tato aplikace nemá vlastní `/auth/confirm` endpoint.
+
+Dokumentace: https://supabase.com/docs/guides/auth/redirect-urls a https://supabase.com/docs/guides/auth/auth-email-templates
 
 ## Co se ukládá
 

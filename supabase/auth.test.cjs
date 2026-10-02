@@ -68,6 +68,24 @@ async function main() {
   assert.match(node('authStatus').textContent, /potvrď registraci/);
   assert.equal(node('authPassword').value, '');
 
+  const localLocation = { ...context.location };
+  for (const pathname of ['/mojestezkaceskem/', '/mojestezkaceskem/index.html']) {
+    Object.assign(context.location, {
+      protocol: 'https:', origin: 'https://janpesek99.github.io', pathname,
+      search: '?v=test', hash: '#irrelevant',
+    });
+    await node('registerBtn').emit('click');
+    node('authPassword').value = 'Example-password';
+    node('authConfirm').value = 'Example-password';
+    await node('authForm').emit('submit');
+    assert.equal(lastCall.options.emailRedirectTo, `https://janpesek99.github.io${pathname}`, 'Public signup must request the public website, without query or fragment');
+    await node('forgotPasswordBtn').emit('click');
+    await node('authForm').emit('submit');
+    assert.equal(lastCall.options.redirectTo, `https://janpesek99.github.io${pathname}`, 'Public password recovery must never request localhost');
+  }
+  Object.assign(context.location, localLocation);
+  await node('switchAuthBtn').emit('click');
+
   failLogin = true;
   node('authPassword').value = 'wrong-password';
   await node('authForm').emit('submit');

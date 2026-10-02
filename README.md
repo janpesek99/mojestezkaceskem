@@ -28,6 +28,8 @@ V projektu Supabase otevři **Authentication → URL Configuration**:
 
 Obě varianty jsou potřeba, protože aplikace používá při potvrzení registrace a obnově hesla adresu aktuální stránky. Změníš-li název repozitáře nebo použiješ vlastní doménu, uprav tyto adresy podle skutečné adresy webu.
 
+Pokud odkaz z e-mailu končí na localhost, oprav Site URL i povolené Redirect URLs přímo v Supabase; samotná změna kódu nebo publikování na GitHub Pages tato nastavení nezmění. Po uložení nastavení požádej z veřejného webu o nový odkaz pro obnovu hesla. Pokud už jsi klikl na potvrzení registrace, účet může být potvrzený i přes neúspěšné přesměrování; zkus přihlášení na veřejném webu. Podrobnosti včetně e-mailových šablon jsou v [supabase/README.md](supabase/README.md#pokud-potvrzení-nebo-obnova-hesla-otevírá-localhost).
+
 Pokud databáze ještě není založená, spusť jednou `supabase/schema.sql`. Poté spusť aktuální `supabase/photo-sync.sql`; pro existující databázi stačí aktuální `photo-sync.sql`. Tím se připraví postup, soukromé fotky i funkce pro jejich ukládání.
 
 Veřejný browserový klíč patří do `supabase-config.js`. Nepoužívej zde `service_role` nebo jiný tajný klíč.
