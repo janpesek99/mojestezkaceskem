@@ -5,6 +5,8 @@ begin;
 alter table public.stage_progress
   add column if not exists photo_paths text[] not null default '{}';
 alter table public.stage_progress
+  add column if not exists photo_deleted_paths text[] not null default '{}';
+alter table public.stage_progress
   add column if not exists completed_km numeric not null default 0
   check (completed_km >= 0 and completed_km <= 162);
 
@@ -23,9 +25,12 @@ alter table public.stage_progress add constraint stage_progress_distance_limit c
 
 -- Merge photo references atomically so a stale device cannot drop newer photos.
 -- SECURITY INVOKER preserves the table's existing RLS and permissions.
+-- Replace the old signature; defaults retain compatibility with older clients.
+drop function if exists public.save_stage_progress(text, boolean, numeric, date, date, text, text[]);
 create or replace function public.save_stage_progress(
   p_stage_id text, p_done boolean, p_completed_km numeric,
-  p_date_from date, p_date_to date, p_note text, p_photo_paths text[]
+  p_date_from date, p_date_to date, p_note text, p_photo_paths text[],
+  p_removed_photo_paths text[] default '{}', p_added_photo_paths text[] default '{}'
 )
 returns setof public.stage_progress
 language plpgsql
@@ -37,7 +42,9 @@ begin
     raise exception 'Authentication required' using errcode = '42501';
   end if;
   if exists (
-    select 1 from unnest(coalesce(p_photo_paths, '{}'::text[])) as photo(path)
+    select 1 from unnest(coalesce(p_photo_paths, '{}'::text[])
+      || coalesce(p_removed_photo_paths, '{}'::text[])
+      || coalesce(p_added_photo_paths, '{}'::text[])) as photo(path)
     where path is null or path !~ (
       '^' || auth.uid()::text || '/' || p_stage_id || '/[a-f0-9]{64}\.(jpg|png|webp|gif)$'
     )
@@ -46,24 +53,36 @@ begin
   end if;
   return query
   insert into public.stage_progress as stored (
-    user_id, stage_id, done, completed_km, date_from, date_to, note, photo_paths
+    user_id, stage_id, done, completed_km, date_from, date_to, note, photo_paths, photo_deleted_paths
   ) values (
     auth.uid(), p_stage_id, p_done, p_completed_km,
     p_date_from, p_date_to, coalesce(p_note, ''),
-    array(select distinct path from unnest(coalesce(p_photo_paths, '{}'::text[])) as photo(path) order by path)
+    array(select distinct path from unnest(coalesce(p_photo_paths, '{}'::text[])) as photo(path)
+      where not (path = any(coalesce(p_removed_photo_paths, '{}'::text[]))) order by path),
+    coalesce(p_removed_photo_paths, '{}'::text[])
   )
   on conflict (user_id, stage_id) do update set
     done = excluded.done, completed_km = excluded.completed_km,
     date_from = excluded.date_from, date_to = excluded.date_to, note = excluded.note,
     photo_paths = array(
-      select distinct path from unnest(stored.photo_paths || excluded.photo_paths) as photo(path) order by path
+      select distinct path from unnest(stored.photo_paths || excluded.photo_paths) as photo(path)
+      where not (path = any(coalesce(p_removed_photo_paths, '{}'::text[])))
+        and (not (path = any(stored.photo_deleted_paths))
+          or path = any(coalesce(p_added_photo_paths, '{}'::text[])))
+      order by path
+    ),
+    photo_deleted_paths = array(
+      select distinct path from unnest(stored.photo_deleted_paths || excluded.photo_deleted_paths) as photo(path)
+      where not (path = any(coalesce(p_added_photo_paths, '{}'::text[])))
+        or path = any(coalesce(p_removed_photo_paths, '{}'::text[]))
+      order by path
     )
   returning stored.*;
 end;
 $$;
 
-revoke all on function public.save_stage_progress(text, boolean, numeric, date, date, text, text[]) from public, anon;
-grant execute on function public.save_stage_progress(text, boolean, numeric, date, date, text, text[]) to authenticated;
+revoke all on function public.save_stage_progress(text, boolean, numeric, date, date, text, text[], text[], text[]) from public, anon;
+grant execute on function public.save_stage_progress(text, boolean, numeric, date, date, text, text[], text[], text[]) to authenticated;
 
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 values (
@@ -109,6 +128,21 @@ create policy "Update own stage photos"
     and (storage.foldername(name))[2] in (
       'n1', 'n2', 'n3', 'n4', 'n5', 'n6', 'n7', 'n8', 'n9', 'n10',
       's11', 's12', 's13', 's14', 's15', 's16', 's17', 's18', 's19', 's20'
+    )
+  );
+
+-- Delete through the Storage API only after the reference was removed.
+-- A concurrent re-add protects the object from delayed cleanup on another device.
+drop policy if exists "Delete own stage photos" on storage.objects;
+create policy "Delete own stage photos"
+  on storage.objects for delete to authenticated
+  using (
+    bucket_id = 'stage-photos'
+    and (storage.foldername(name))[1] = (select auth.uid())::text
+    and not exists (
+      select 1 from public.stage_progress as progress
+      where progress.user_id = (select auth.uid())
+        and storage.objects.name = any(progress.photo_paths)
     )
   );
 

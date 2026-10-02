@@ -462,11 +462,64 @@ textarea:focus {
 }
 
 .photo-preview img {
-  width: 58px;
-  height: 58px;
+  display: block;
+  width: 76px;
+  height: 76px;
   border: 1px solid var(--line);
   border-radius: 8px;
   object-fit: cover;
+}
+
+.photo-card {
+  display: grid;
+  width: 76px;
+  gap: 4px;
+}
+
+.photo-open {
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: var(--surface);
+  cursor: zoom-in;
+}
+
+.photo-open:focus-visible,
+.photo-remove:focus-visible {
+  outline: 3px solid var(--green);
+  outline-offset: 2px;
+}
+
+.photo-remove {
+  min-height: 44px;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: #9b392b;
+  font-size: .85rem;
+}
+
+.photo-dialog {
+  width: fit-content;
+  max-width: calc(100% - 24px);
+  max-height: calc(100dvh - 24px);
+  padding: 52px 12px 12px;
+  border: 0;
+  border-radius: 16px;
+  background: var(--surface);
+}
+
+.photo-dialog::backdrop {
+  background: #18281dcc;
+}
+
+.photo-dialog img {
+  display: block;
+  max-width: 100%;
+  max-height: calc(100dvh - 88px);
+  margin: auto;
+  object-fit: contain;
 }
 
 [hidden] {

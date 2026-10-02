@@ -8,6 +8,7 @@ function element() {
     value: '', checked: false, disabled: false, hidden: false, textContent: '',
     classList: { toggle() {}, add() {}, remove() {} },
     addEventListener() {}, setCustomValidity(value) { this.validity = value; },
+    querySelectorAll() { return []; },
     reportValidity() { return !this.validity; },
   };
 }
@@ -133,6 +134,9 @@ async function photoSyncTests() {
   let downloads = 0;
   let resolveUpload;
   let resolveDownload;
+  const deletedPaths = new Set();
+  const removals = [];
+  let removeError = false;
   const configure = (target) => {
     target.fetch = fetch;
     target.crypto = require('node:crypto').webcrypto;
@@ -145,11 +149,16 @@ async function photoSyncTests() {
   context.photoClient = {
     rpc(name, args) {
       assert.equal(name, 'save_stage_progress');
-      if (!databaseError) savedRow = {
+      if (!databaseError) {
+        for (const path of args.p_added_photo_paths || []) deletedPaths.delete(path);
+        for (const path of args.p_removed_photo_paths || []) deletedPaths.add(path);
+        savedRow = {
         user_id: 'PHOTO-USER', stage_id: args.p_stage_id, done: args.p_done, completed_km: args.p_completed_km,
         date_from: args.p_date_from, date_to: args.p_date_to, note: args.p_note,
-        photo_paths: [...new Set([...(savedRow?.photo_paths || []), ...args.p_photo_paths])],
+        photo_paths: [...new Set([...(savedRow?.photo_paths || []), ...args.p_photo_paths])].filter((path) => !deletedPaths.has(path)),
+        photo_deleted_paths: [...deletedPaths],
       };
+      }
       return { single: async () => ({ data: savedRow, error: databaseError ? new Error('offline') : null }) };
     },
     from() {
@@ -173,6 +182,10 @@ async function photoSyncTests() {
           assert.equal(path, savedRow.photo_paths[0]);
           if (resolveDownload === 'defer') return new Promise((resolve) => { resolveDownload = resolve; });
           return { data: new Blob(['photo'], { type: 'image/png' }), error: null };
+        },
+        async remove(paths) {
+          removals.push([...paths]);
+          return { error: removeError ? new Error('offline') : null };
         },
       };
     } },
@@ -231,6 +244,35 @@ async function photoSyncTests() {
   assert.equal(run('getEntry("n1").photos.length'), 3, 'A stale device must accept merged photos from the database');
   assert.equal(run('getEntry("n1").photos[2].path'), remotePhoto);
 
+  // Removing one photo must preserve remotely added photos and survive failed saves.
+  const removedPath = savedRow.photo_paths[0];
+  context.removedPath = removedPath;
+  run('state.removedPhotos = [getEntry("n1").photos[0]];');
+  databaseError = true;
+  await run('saveEntry();');
+  assert.equal(run('state.removedPhotos.length'), 1, 'Failed deletion save retains the draft');
+  assert.equal(savedRow.photo_paths.length, 3, 'Failed save does not remove persisted photos');
+  databaseError = false;
+  removeError = true;
+  await run('saveEntry();');
+  assert.equal(savedRow.photo_paths.includes(removedPath), false);
+  assert.equal(savedRow.photo_paths.includes(remotePhoto), true, 'Deleting a photo must retain photos from another device');
+  assert.equal(run('state.removedPhotos.length'), 0, 'Committed deletion clears the draft even if object cleanup fails');
+  assert.match(nodes.get('#syncStatus').textContent, /úložiště/);
+  assert.equal(removals.at(-1).includes(removedPath), true);
+  removeError = false;
+  await run('saveEntry();');
+  assert.equal(removals.length, 2, 'A later save retries failed object cleanup');
+  // A stale device submits the old photo list; the deletion marker wins.
+  await context.photoClient.rpc('save_stage_progress', {
+    p_stage_id: 'n1', p_photo_paths: [...savedRow.photo_paths, removedPath],
+  }).single();
+  assert.equal(savedRow.photo_paths.includes(removedPath), false, 'Stale saves cannot resurrect deleted photos');
+  run('state.pendingPhotos = [png];');
+  await run('saveEntry();');
+  assert.equal(savedRow.photo_paths.includes(removedPath), true, 'Explicit re-add restores the same content');
+  assert.equal(savedRow.photo_deleted_paths.includes(removedPath), false);
+
   // A logout while an upload is in flight cannot attach its result to another account.
   context.thirdPng = 'data:image/png;base64,dGhpcmQ=';
   run('state.pendingPhotos = [thirdPng];');
@@ -266,6 +308,9 @@ async function photoSyncTests() {
   await run('saveEntry();');
   assert.equal(uploads.length, uploadCount);
   assert.equal(JSON.parse(storage.get('moje-stezka-ceskem-v2')).n1.photos[0], png);
+  run('state.removedPhotos = [getEntry("n1").photos[0]];');
+  await run('saveEntry();');
+  assert.equal(JSON.parse(storage.get('moje-stezka-ceskem-v2')).n1.photos.length, 0, 'Guest deletion persists locally');
   let finishRead;
   context.FileReader = class {
     addEventListener(name, callback) { this[name] = callback; }

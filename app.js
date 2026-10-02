@@ -80,6 +80,7 @@ const state = {
   selectedId: null,
   entries: loadEntries(),
   pendingPhotos: [],
+  removedPhotos: [],
   drafts: new Map(),
   photoCache: new Map(),
   user: null,
@@ -111,6 +112,9 @@ const elements = {
   photoInput: document.querySelector("#photoInput"),
   photoPreview: document.querySelector("#photoPreview"),
   photoStorageNote: document.querySelector("#photoStorageNote"),
+  photoDialog: document.querySelector("#photoDialog"),
+  photoDialogImage: document.querySelector("#photoDialogImage"),
+  closePhoto: document.querySelector("#closePhotoBtn"),
   save: document.querySelector("#saveEntryBtn"),
   progressPercent: document.querySelector("#mapProgressPercent"),
   progressText: document.querySelector("#mapProgressText"),
@@ -134,6 +138,11 @@ function init() {
     elements.done.checked = Number(elements.completedKm.value) === findStage(state.selectedId).km;
   });
   elements.photoInput.addEventListener("change", addPhotos);
+  elements.closePhoto.addEventListener("click", closePhotoPreview);
+  elements.photoDialog.addEventListener("click", (event) => {
+    if (event.target === elements.photoDialog) closePhotoPreview();
+  });
+  elements.photoDialog.addEventListener("close", () => elements.photoDialogImage.removeAttribute("src"));
   [elements.dateFrom, elements.dateTo].forEach((input) =>
     input.addEventListener("input", () => elements.dateTo.setCustomValidity("")));
   window.addEventListener("stezka:auth", handleAuthChange);
@@ -155,6 +164,7 @@ function updateJournalControls() {
   const disabled = !state.selectedId || journalLocked();
   [elements.done, elements.completedKm, elements.dateFrom, elements.dateTo, elements.note, elements.photoInput, elements.save]
     .forEach((element) => { element.disabled = disabled; });
+  elements.photoPreview.querySelectorAll(".photo-remove").forEach((button) => { button.disabled = disabled; });
   elements.save.textContent = state.saving ? "Ukládám…" : state.readingPhotos ? "Načítám fotky…" : "Uložit";
 }
 
@@ -162,11 +172,13 @@ function handleAuthChange(event) {
   const { user, client } = event.detail;
   if (state.authReady && state.user?.id === user?.id) return;
   state.revision += 1;
+  closePhotoPreview();
   clearPhotoCache();
   state.authReady = true;
   state.user = user;
   state.client = client;
   state.pendingPhotos = [];
+  state.removedPhotos = [];
   state.drafts.clear();
   state.saving = false;
   state.readingPhotos = false;
@@ -271,7 +283,7 @@ function assertCurrentAccount(revision) {
   if (revision !== state.revision) throw new Error("Account changed");
 }
 
-async function uploadCloudPhotos(photos, stageId, userId, client, revision) {
+async function uploadCloudPhotos(photos, stageId, userId, client, revision, addedPaths = []) {
   const uploaded = new Map();
   for (const photo of photos) {
     assertCurrentAccount(revision);
@@ -289,6 +301,7 @@ async function uploadCloudPhotos(photos, stageId, userId, client, revision) {
     const hash = await crypto.subtle.digest("SHA-256", await blob.arrayBuffer());
     const filename = Array.from(new Uint8Array(hash), (byte) => byte.toString(16).padStart(2, "0")).join("");
     const path = `${userId}/${stageId}/${filename}.${extension}`;
+    addedPaths.push(path);
     assertCurrentAccount(revision);
     // A stable content hash prevents duplicates when retrying a failed save.
     if (!uploaded.has(path)) {
@@ -406,25 +419,44 @@ async function saveEntry(event) {
     dateFrom: elements.dateFrom.value,
     dateTo: elements.dateTo.value,
     note: elements.note.value.trim(),
-    photos: [...(previous.photos || []), ...state.pendingPhotos],
+    photos: [...(previous.photos || []).filter((photo) => !state.removedPhotos.includes(photo)), ...state.pendingPhotos],
   };
 
   state.saving = true;
   updateJournalControls();
   syncMessage("Ukládám záznam…");
+  let cleanupFailed = false;
   try {
     if (userId) {
       syncMessage(entry.photos.length ? "Ukládám záznam a synchronizuji fotky…" : "Ukládám záznam…");
-      entry.photos = await uploadCloudPhotos(entry.photos, id, userId, client, revision);
+      const addedPaths = [];
+      entry.photos = await uploadCloudPhotos(entry.photos, id, userId, client, revision, addedPaths);
+      const removedPaths = state.removedPhotos.filter((photo) => typeof photo !== "string").map((photo) => photo.path);
       assertCurrentAccount(revision);
       const { data, error } = await client.rpc("save_stage_progress", {
         p_stage_id: id, p_done: entry.done, p_completed_km: entry.completedKm,
         p_date_from: entry.dateFrom || null, p_date_to: entry.dateTo || null, p_note: entry.note,
         p_photo_paths: entry.photos.map((photo) => photo.path),
+        ...((removedPaths.length || addedPaths.length) ? {
+          p_removed_photo_paths: removedPaths, p_added_photo_paths: [...new Set(addedPaths)],
+        } : {}),
       }).single();
       if (error) throw error;
       if (revision !== state.revision) return;
       entry.photos = data.photo_paths.map((path) => ({ path }));
+      const deletedPaths = (data.photo_deleted_paths || []).filter((path) => validPhotoPath(path, userId, id));
+      deletedPaths.forEach((path) => {
+        const cached = state.photoCache.get(path);
+        if (cached?.url?.startsWith("blob:")) URL.revokeObjectURL(cached.url);
+        state.photoCache.delete(path);
+      });
+      if (deletedPaths.length) {
+        try {
+          const result = await client.storage.from(photoBucket).remove(deletedPaths);
+          cleanupFailed = Boolean(result.error);
+        } catch { cleanupFailed = true; }
+        assertCurrentAccount(revision);
+      }
       try {
         const photos = loadLocalPhotos(userId);
         delete photos[id];
@@ -439,8 +471,11 @@ async function saveEntry(event) {
     state.entries[id] = entry;
     state.drafts.delete(id);
     state.pendingPhotos = [];
+    state.removedPhotos = [];
     elements.photoInput.value = "";
-    syncMessage(userId ? "Záznam i fotky jsou uložené v tvém účtu." : "Uloženo v tomto prohlížeči.");
+    syncMessage(cleanupFailed
+      ? "Záznam je uložený a fotka odebraná z etapy. Soubor se nepodařilo odstranit z úložiště; další uložení to zkusí znovu."
+      : userId ? "Záznam i fotky jsou uložené v tvém účtu." : "Uloženo v tomto prohlížeči.", cleanupFailed);
     render();
   } catch (error) {
     if (revision !== state.revision) return;
@@ -686,7 +721,8 @@ function renderJournal() {
 function renderPhotos() {
   if (!state.selectedId) return;
   const entry = getEntry(state.selectedId);
-  const photos = [...(entry.photos || []), ...state.pendingPhotos];
+  const savedPhotos = (entry.photos || []).filter((photo) => !state.removedPhotos.includes(photo));
+  const photos = [...savedPhotos, ...state.pendingPhotos];
   trimPhotoCache();
   elements.photoPreview.innerHTML = "";
 
@@ -694,11 +730,40 @@ function renderPhotos() {
   if (state.user && (entry.photos || []).some((photo) => typeof photo === "string")) {
     elements.photoStorageNote.textContent = "Ulož etapu a přenes do účtu i její starší fotky z tohoto prohlížeče.";
   }
-  photos.forEach((photo) => {
+  photos.forEach((photo, index) => {
+    const card = document.createElement("div");
+    card.className = "photo-card";
+    const preview = document.createElement("button");
+    preview.type = "button";
+    preview.className = "photo-open";
+    preview.setAttribute("aria-label", `Zvětšit fotku ${index + 1}`);
     const image = document.createElement("img");
     image.decoding = "async";
     image.alt = "Fotka z etapy";
-    elements.photoPreview.appendChild(image);
+    preview.appendChild(image);
+    preview.addEventListener("click", () => {
+      if (!image.getAttribute("src")) return;
+      elements.photoDialogImage.src = image.src;
+      elements.photoDialogImage.alt = `Fotka z etapy ${findStage(state.selectedId).name}`;
+      elements.photoDialog.showModal();
+    });
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "photo-remove";
+    remove.textContent = "Smazat";
+    remove.setAttribute("aria-label", `Smazat fotku ${index + 1}`);
+    remove.disabled = journalLocked();
+    remove.addEventListener("click", () => {
+      if (journalLocked()) return;
+      if (index < savedPhotos.length) state.removedPhotos.push(photo);
+      else state.pendingPhotos.splice(index - savedPhotos.length, 1);
+      renderPhotos();
+      elements.photoPreview.querySelectorAll(".photo-remove")[Math.min(index, elements.photoPreview.children.length - 1)]?.focus();
+      if (!elements.photoPreview.children.length) elements.save.focus();
+      syncMessage("Fotka je odebraná z rozpracované etapy. Změnu potvrď tlačítkem Uložit.");
+    });
+    card.append(preview, remove);
+    elements.photoPreview.appendChild(card);
     if (typeof photo === "string") {
       image.src = photo;
     } else {
@@ -714,6 +779,10 @@ function renderPhotos() {
       });
     }
   });
+}
+
+function closePhotoPreview() {
+  if (elements.photoDialog.open) elements.photoDialog.close();
 }
 
 function renderStats() {
@@ -733,6 +802,7 @@ function selectStage(stageId) {
   rememberDraft();
   state.selectedId = state.selectedId === stageId ? null : stageId;
   state.pendingPhotos = [...(state.drafts.get(state.selectedId)?.pendingPhotos || [])];
+  state.removedPhotos = [...(state.drafts.get(state.selectedId)?.removedPhotos || [])];
   render();
   if (state.selectedId && window.matchMedia("(max-width: 860px)").matches) {
     elements.list.querySelector(".stage-button.active")?.scrollIntoView({
@@ -748,6 +818,7 @@ function rememberDraft() {
     done: elements.done.checked, completedKm: elements.completedKm.value,
     dateFrom: elements.dateFrom.value, dateTo: elements.dateTo.value,
     note: elements.note.value, pendingPhotos: [...state.pendingPhotos],
+    removedPhotos: [...state.removedPhotos],
   });
 }
 

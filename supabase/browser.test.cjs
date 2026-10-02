@@ -12,6 +12,7 @@ const bootstrap = `<script>
   let user = null;
   const rows = new Map();
   const files = new Map();
+  const deleted = new Map();
   const client = {
     auth: {
       onAuthStateChange(callback) { onAuth = callback; return { data: { subscription: { unsubscribe() {} } } }; },
@@ -26,10 +27,15 @@ const bootstrap = `<script>
     },
     from() { return { select() { return { async eq() { return { data: [...rows.values()], error: null }; } }; } }; },
     rpc(name, args) {
+      const removed = deleted.get(args.p_stage_id) || new Set();
+      for (const path of args.p_added_photo_paths || []) removed.delete(path);
+      for (const path of args.p_removed_photo_paths || []) removed.add(path);
+      deleted.set(args.p_stage_id, removed);
       const row = {
         stage_id: args.p_stage_id, done: args.p_done, completed_km: args.p_completed_km,
         date_from: args.p_date_from, date_to: args.p_date_to, note: args.p_note,
-        photo_paths: [...new Set([...(rows.get(args.p_stage_id)?.photo_paths || []), ...args.p_photo_paths])],
+        photo_paths: [...new Set([...(rows.get(args.p_stage_id)?.photo_paths || []), ...args.p_photo_paths])].filter(path => !removed.has(path)),
+        photo_deleted_paths: [...removed],
       };
       rows.set(row.stage_id, row);
       return { async single() { return { data: row, error: null }; } };
@@ -37,6 +43,7 @@ const bootstrap = `<script>
     storage: { from() { return {
       async upload(path, blob) { files.set(path, blob); return { error: null }; },
       async download(path) { return { data: files.get(path), error: null }; },
+      async remove(paths) { for (const path of paths) files.delete(path); return { error: null }; },
     }; } },
   };
   window.supabase = { createClient() { return client; } };
@@ -141,9 +148,21 @@ async function main() {
     await check('elements.note.value === "Rozpracovaný záznam" && elements.completedKm.value === "25.5"', 'Changing stages must preserve the draft');
     await evaluate('window.testPng = Uint8Array.from(atob("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII="), c => c.charCodeAt(0)); await addPhotos({ target: { files: [new File([testPng], "photo.png", { type: "image/png" })] } }); document.querySelectorAll(".stage-button")[1].click(); originalButton.click();');
     await check('state.pendingPhotos.length === 1 && elements.photoPreview.querySelectorAll("img").length === 1', 'Unsaved photos must survive stage changes');
+    await evaluate('elements.photoPreview.querySelector(".photo-open").click();');
+    await check('elements.photoDialog.open && elements.photoDialogImage.src.startsWith("data:image/")', 'Guest thumbnail must open a large preview');
+    await check('document.documentElement.scrollWidth <= innerWidth', 'Preview must fit a mobile viewport');
+    await send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 });
+    await send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 });
+    await until('!elements.photoDialog.open && !elements.photoDialogImage.getAttribute("src")');
+    await evaluate('await addPhotos({ target: { files: [new File([testPng], "second.png", { type: "image/png" })] } }); elements.photoPreview.querySelectorAll(".photo-remove")[1].click();');
+    await check('state.pendingPhotos.length === 1', 'Delete must remove only the chosen unsaved photo');
     await check('originalButton === document.querySelector(".stage-button") && originalSegment === document.querySelector(".route-segment")', 'Rendering must preserve map and list nodes');
     await evaluate('await saveEntry();');
     await check('getEntry("n1").completedKm === 25.5 && !getEntry("n1").done', 'Partial progress must save');
+    await evaluate('elements.photoPreview.querySelector(".photo-remove").click(); document.querySelectorAll(".stage-button")[1].click(); originalButton.click();');
+    await check('state.removedPhotos.length === 1 && !elements.photoPreview.querySelector("img") && getEntry("n1").photos.length === 1', 'Photo deletion must stay in the draft across stage changes');
+    await evaluate('await saveEntry();');
+    await check('getEntry("n1").photos.length === 0 && JSON.parse(localStorage.getItem(storageKey)).n1.photos.length === 0', 'Saving must persist guest photo deletion');
     await check('mapViews.get("n1").partial.style.display !== "none"', 'Partial route must be visible');
     await check('mapViews.get("n1").partial.getAttribute("stroke-dasharray").split(" ")[0] > 0', 'Partial route must show a positive travelled length');
     await check('getComputedStyle(mapViews.get("n1").partial).stroke === "rgb(198, 91, 22)"', 'Partial progress must use its own color');
@@ -182,8 +201,17 @@ async function main() {
     await evaluate('document.querySelector("#loginBtn").click(); document.querySelector("#authPassword").value = "test-password"; document.querySelector("#authForm").requestSubmit();');
     await until('state.user?.id === "browser-user" && !state.loading && elements.photoPreview.querySelector("img")?.src.startsWith("blob:")');
     await check('getEntry("n1").photos.length === 1', 'Account photo must load again through authenticated download');
+    await evaluate('elements.photoPreview.querySelector(".photo-open").click();');
+    await check('elements.photoDialog.open && elements.photoDialogImage.src.startsWith("blob:")', 'Cloud preview must reuse the private downloaded photo');
+    await evaluate('elements.closePhoto.click();');
+    await until('!elements.photoDialog.open');
+    await evaluate('elements.photoPreview.querySelector(".photo-remove").click(); await saveEntry(); await loadCloudEntries();');
+    await check('getEntry("n1").photos.length === 0 && state.photoCache.size === 0', 'Cloud deletion must survive reload and revoke cached images');
+    await evaluate('await addPhotos({ target: { files: [new File([testPng], "re-added.png", { type: "image/png" })] } }); await saveEntry();');
+    await until('elements.photoPreview.querySelector("img")?.src.startsWith("blob:")');
+    await check('getEntry("n1").photos.length === 1', 'A deleted photo can be explicitly added again');
     assert.deepEqual(errors, [], 'Browser must not raise uncaught exceptions');
-    console.log('PASS: real Chrome mobile/desktop layout, draft/photo retention, stable nodes/focus, partial/full progress, keyboard map, validation, login/logout isolation, photo upload/download');
+    console.log('PASS: real Chrome mobile/desktop layout, drafts, progress, login isolation, photo preview/Escape, pending/guest/cloud deletion, deletion retention and re-add');
     await send('Browser.close').catch(() => {});
   } finally {
     socket?.close();
