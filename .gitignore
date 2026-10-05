@@ -1,6 +1,9 @@
 .checks/
 _site/
-debug.log
+*.log
+Thumbs.db
+Desktop.ini
+.DS_Store
 .env
 .env.*
 !.env.example

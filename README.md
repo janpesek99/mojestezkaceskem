@@ -4,17 +4,32 @@ Osobní deník Stezky Českem: mapa, postup po etapách i kilometrech, poznámky
 
 ## GitHub Pages
 
-Cílový účet: `janpesek99`. Doporučený název repozitáře: `mojestezkaceskem`.
-Po nasazení bude web na **https://janpesek99.github.io/mojestezkaceskem/**.
+Web běží na **https://janpesek99.github.io/mojestezkaceskem/**.
+Zdrojové soubory jsou v [repozitáři na GitHubu](https://github.com/janpesek99/mojestezkaceskem).
 
-1. Vytvoř na GitHubu repozitář `mojestezkaceskem` a nahraj tento projekt na větev `main`, včetně `.github/workflows/pages.yml`.
-2. V repozitáři otevři **Settings → Pages → Build and deployment → Source** a vyber **GitHub Actions**.
-3. V **Actions → Publish website to GitHub Pages** spusť **Run workflow**. Další změny webových souborů na větvi `main` se nasadí automaticky.
-4. Adresu úspěšného nasazení najdeš v **Settings → Pages** nebo u prostředí `github-pages`.
+Změny webových souborů na větvi `main` nasazuje automaticky workflow [Publish website to GitHub Pages](.github/workflows/pages.yml). Výsledek je v záložce **Actions**; nasazení lze zopakovat pomocí **Run workflow**. V **Settings → Pages → Build and deployment → Source** je nastaveno **GitHub Actions**.
 
-Workflow publikuje pouze `index.html`, `styles.css`, `app.js`, `auth.js` a veřejnou konfiguraci `supabase-config.js`. SQL, testy a lokální server se do webu nekopírují. Pro GitHub Free použij veřejný repozitář; soukromý repozitář s Pages vyžaduje podporovaný placený plán.
+Workflow kopíruje do webu pouze `index.html`, `styles.css`, `app.js`, `auth.js` a veřejnou konfiguraci `supabase-config.js`. Ostatní soubory jsou viditelné ve veřejném zdrojovém repozitáři, ale přes adresu webu se neposkytují.
 
 Postup GitHubu: https://docs.github.com/en/pages/getting-started-with-github-pages/using-custom-workflows-with-github-pages
+
+## Soubory v repozitáři
+
+| Soubory | Účel | Publikují se na GitHub Pages |
+| --- | --- | --- |
+| `index.html`, `styles.css`, `app.js` | Rozhraní, mapa a deník etap. | Ano |
+| `auth.js`, `supabase-config.js` | Přihlášení a veřejné nastavení připojení k Supabase. | Ano |
+| `.github/workflows/pages.yml` | Automatické nasazení webu. | Ne |
+| `supabase/schema.sql` | Založení databáze a přístupových pravidel pro nový projekt. | Ne |
+| `supabase/photo-sync.sql` | Aktuální rozšíření databáze pro kilometry, synchronizaci a mazání fotek. | Ne |
+| `supabase/*.test.cjs` | Kontroly aplikace, přihlášení, lokálního serveru a prohlížeče. | Ne |
+| `serve-local.ps1`, `start-local.cmd` | Spuštění webu na lokálním počítači s Windows. | Ne |
+| `README.md`, `supabase/README.md` | Návody k provozu a nastavení databáze. | Ne |
+| `.gitignore` | Vyloučení lokálních a generovaných souborů z Gitu. | Ne |
+
+SQL skripty zůstávají potřebné pro založení nového projektu a aktualizaci existující databáze. Starý `partial-progress.sql` byl odstraněn; jeho rozšíření pro částečný postup už obsahuje `photo-sync.sql`.
+
+Do repozitáře se nesledují `.checks/` (lokální kontroly a pomocné skripty), `_site/` (výstup nasazení), soubory `.env`, logy a dočasné soubory operačního systému. Osobní záznamy a fotky aplikace ukládá do prohlížeče nebo Supabase, nikoli do repozitáře.
 
 ## Přihlášení na veřejném webu
 
